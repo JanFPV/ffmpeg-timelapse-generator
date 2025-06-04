@@ -1,9 +1,19 @@
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 from PIL.ExifTags import TAGS
 from datetime import datetime
 import pandas as pd
 import os
+import shutil
 import subprocess
+
+TEXT_CONFIG = {
+    'font_size_ratio': 0.03,
+    'padding': 50,
+    'outline_range': 2,
+    'font_path': "DejaVuSans-Bold.ttf",
+    'text_fill': "white",
+    'outline_fill': "black"
+}
 
 def extract_exif_timestamp(image_path):
     try:
@@ -68,6 +78,49 @@ def suggest_common_scale(df):
     print(f"Suggested common scale: {most_common_width}:{most_common_height}")
     return f"{most_common_width}:{most_common_height}"
 
+def generate_images_with_timestamps(df, output_dir):
+    print(f"Generating timestamped images in '{output_dir}'...")
+    os.makedirs(output_dir, exist_ok=True)
+    temp_paths = []
+
+    for i, row in df.iterrows():
+        try:
+            img = Image.open(row['path']).convert("RGB")
+            draw = ImageDraw.Draw(img)
+            width, height = img.size
+            timestamp_str = row['timestamp'].strftime("%Y-%m-%d %H:%M:%S") if row['timestamp'] else "Unknown"
+
+            font_size = int(height * TEXT_CONFIG['font_size_ratio'])
+            try:
+                font = ImageFont.truetype(TEXT_CONFIG['font_path'], font_size)
+            except:
+                font = ImageFont.load_default()
+
+            bbox = draw.textbbox((0, 0), timestamp_str, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+
+            x = TEXT_CONFIG['padding']
+            y = height - text_height - TEXT_CONFIG['padding']
+
+            for ox in range(-TEXT_CONFIG['outline_range'], TEXT_CONFIG['outline_range'] + 1):
+                for oy in range(-TEXT_CONFIG['outline_range'], TEXT_CONFIG['outline_range'] + 1):
+                    if ox == 0 and oy == 0:
+                        continue
+                    draw.text((x + ox, y + oy), timestamp_str, font=font, fill=TEXT_CONFIG['outline_fill'])
+
+            draw.text((x, y), timestamp_str, fill=TEXT_CONFIG['text_fill'], font=font)
+
+            temp_path = os.path.join(output_dir, f"frame_{i:04d}.jpg")
+            img.save(temp_path)
+            temp_paths.append(temp_path)
+            print(f"Saved: {temp_path}")
+        except Exception as e:
+            print(f"Error processing image {row['path']}: {e}")
+
+    print("Finished generating timestamped images.")
+    return temp_paths
+
 def generate_timelapse_ffmpeg(
     df,
     output_path="timelapse.mp4",
@@ -77,26 +130,25 @@ def generate_timelapse_ffmpeg(
     preset="medium",
     scale=None,
     codec="libx264",
-    pix_fmt="yuv420p"
+    pix_fmt="yuv420p",
+    delete_temp_files=True
 ):
-    temp_list_file = "input_list.txt"
+    temp_dir = "./temp_with_text"
+    if overlay_timestamp:
+        df = df.reset_index(drop=True)
+        image_paths = generate_images_with_timestamps(df, temp_dir)
+    else:
+        image_paths = df['path'].tolist()
 
+    print("Creating input list for FFmpeg...")
+    temp_list_file = "input_list.txt"
     with open(temp_list_file, "w") as f:
-        for _, row in df.iterrows():
-            f.write(f"file '{row['path']}'\n")
+        for path in image_paths:
+            f.write(f"file '{path}'\n")
 
     filters = []
     if scale:
         filters.append(f"scale={scale}")
-
-    if overlay_timestamp:
-        drawtext = (
-            "drawtext=\""
-            "fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
-            f"text='%{{pts\\:localtime\\:{int(df.iloc[0]['timestamp'].timestamp())}+t}}':"
-            "fontcolor=white: fontsize=24: box=1: boxcolor=black@0.5: x=10: y=10\""
-        )
-        filters.append(drawtext)
 
     filter_str = f"-vf {','.join(filters)}" if filters else ""
 
@@ -112,6 +164,13 @@ def generate_timelapse_ffmpeg(
         f"-c:v {codec} -crf {crf} -preset {preset} -pix_fmt {pix_fmt} {final_output_path}"
     )
 
-    print("Running:", command)
+    print("Running FFmpeg command:")
+    print(command)
     subprocess.run(command, shell=True)
     os.remove(temp_list_file)
+
+    if delete_temp_files and overlay_timestamp:
+        print(f"Removing temporary directory '{temp_dir}'...")
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    print(f"Timelapse video saved as: {final_output_path}")
