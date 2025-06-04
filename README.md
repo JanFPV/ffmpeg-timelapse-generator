@@ -20,6 +20,7 @@ A lightweight Python + FFmpeg tool to generate timelapse videos from image seque
 Python packages:
 - `pandas`
 - `Pillow`
+- `ipykernel`
 
 ## 🔧 Setup Instructions
 
