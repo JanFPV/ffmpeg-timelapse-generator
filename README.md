@@ -31,21 +31,6 @@ source venv/bin/activate   # On Windows use: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## 🧪 Example usage (in Jupyter or script)
-
-```python
-from timelapse import obtener_dataframe_imagenes, crear_timelapse_ffmpeg
-
-# Directory containing sequential images
-directorio = "/path/to/your/images"
-
-# Create dataframe with timestamps
-df = obtener_dataframe_imagenes(directorio)
-
-# Generate timelapse video (with optional timestamp overlay)
-crear_timelapse_ffmpeg(df, salida="timelapse.mp4", fps=24, timestamp=True)
-```
-
 ## 📂 Project Structure
 
 ```
@@ -57,13 +42,6 @@ ffmpeg-timelapse-generator/
 └── README.md             # Documentation
 ```
 
-## 🛠️ To Do
-
-- Add support for image resizing or cropping
-- Custom font/color selection for timestamp overlay
-- CLI interface (optional)
-- Unit tests
-
 ## 📝 License
 
-MIT License
+GNU GPL-3.0 License
