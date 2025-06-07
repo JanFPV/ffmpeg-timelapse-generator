@@ -29,7 +29,7 @@ def extract_exif_timestamp(image_path):
         print(f"Error reading EXIF from {image_path}: {e}")
     return None
 
-def get_image_dataframe(dir_path):
+def get_image_dataframe(dir_path, force_alphabetical_order=False):
     files = sorted([f for f in os.listdir(dir_path) if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
     data = []
 
@@ -63,9 +63,19 @@ def get_image_dataframe(dir_path):
     df = pd.DataFrame(data)
 
     print("Image resolution summary:")
-    print(df[['width', 'height', 'aspect_ratio']].describe(include='all'))
+    print(df[['width', 'height', 'aspect_ratio']]
+      .describe()
+      .loc[['count', 'mean', 'std']])
 
-    return df.sort_values(by='timestamp').reset_index(drop=True)
+    print(f"Using order based on {'filename' if force_alphabetical_order else 'timestamp'}")
+    print(f"First image: {df.iloc[0]['file']}, Last image: {df.iloc[-1]['file']}")
+
+    if force_alphabetical_order:
+        df = df.sort_values(by='file')
+    else:
+        df = df.sort_values(by='timestamp')
+
+    return df.reset_index(drop=True)
 
 def suggest_common_scale(df):
     valid_df = df.dropna(subset=['width', 'height'])
